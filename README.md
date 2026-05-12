@@ -24,7 +24,13 @@ separate dependency, release, or ownership boundaries. Until then, a single pack
 
 ## Setup
 
-Install Python 3.13 and uv, then create the environment:
+Prerequisites:
+
+- Git
+- uv
+- A configured Git identity, preferably using a GitHub noreply email if GitHub email privacy is on
+
+Create the Python 3.13 environment:
 
 ```bash
 uv python install 3.13
@@ -50,6 +56,9 @@ uv run ruff check .
 uv run ruff format --check .
 uv run pytest
 ```
+
+The dev environment includes Ruff, pre-commit, pytest, pytest-cov, Hypothesis, JupyterLab,
+ipykernel, ipywidgets, nbclient, and nbconvert.
 
 Start notebooks:
 
