@@ -81,6 +81,49 @@ For GPU work, install PyTorch separately using the command that matches the loca
 target from the official PyTorch selector. Keeping PyTorch out of the default dependencies avoids
 pulling the wrong binary for a machine.
 
+## Stock Price Agent
+
+The first agentic workflow collects delayed US stock quotes and appends normalized rows to
+`data/processed/stock_prices.csv`. Each new row includes the latest price, previous saved price,
+absolute price change, percent change, and an optional LLM summary of the run.
+
+I recommend Stooq for this first NYSE experiment because its CSV endpoint is simple, free to call
+without an API key, and good enough for delayed quote collection. Use a paid market-data API later
+if you need official real-time exchange data, service-level guarantees, or richer fundamentals.
+
+Run the default NYSE watchlist:
+
+```bash
+uv run stock-prices
+```
+
+Run a custom set of US ticker symbols:
+
+```bash
+uv run stock-prices IBM KO JPM
+```
+
+Use the local Ollama planner to turn a natural-language request into symbols before fetching:
+
+```bash
+uv run stock-prices --request "check big US bank stocks"
+```
+
+When `--request` is used, the same local Ollama model also summarizes the fetched prices and
+their changes versus the last saved row for each symbol.
+
+The default planning model is `gemma4:e4b`. Override it when needed:
+
+```bash
+uv run stock-prices --request "check large AI infrastructure stocks" --model gemma4:e4b
+```
+
+Choose a different output table:
+
+```bash
+uv run stock-prices IBM KO JPM --table data/processed/my_prices.csv
+```
+
 ## Practices
 
 - Move reusable notebook code into `src/llm_spark_exp`.
