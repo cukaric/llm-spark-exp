@@ -6,8 +6,18 @@ import argparse
 import sys
 from pathlib import Path
 
-from llm_spark_exp.synthetic_faces._common import save_jpeg
-from llm_spark_exp.synthetic_faces.constants import IMAGE_SUFFIXES
+from llm_spark_exp.synthetic_faces._common import (
+    iter_identity_dirs,
+    list_identity_images,
+    save_jpeg,
+)
+
+# OSDFace one-step restoration constants (SD 2.1 base / upstream OSDFace).
+OSDFACE_INPUT_SIZE = 512  # resolution the VAE/UNet operate at
+SD_PROMPT_TOKENS = 77  # stable-diffusion text-encoder sequence length
+OSDFACE_DENOISE_TIMESTEP = 399  # fixed timestep for the one-step prediction
+LORA_RANK = 16
+LORA_ALPHA = 16
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,7 +44,13 @@ def load_osdface_model(
     merge_lora: bool,
     mixed_precision: str,
     device: str,
-):
+) -> dict:
+    """Load the OSDFace one-step restoration model bundle from a local checkout.
+
+    Returns a dict holding the VAE, UNet, image encoder, embedding-change head,
+    and the scheduling tensors/timestep that ``restore_image`` consumes.
+    """
+
     import torch
     from diffusers import AutoencoderKL, DDIMScheduler, UNet2DConditionModel
 
@@ -81,20 +97,20 @@ def load_osdface_model(
         "alphas_cumprod": alphas_cumprod,
         "weight_dtype": weight_dtype,
         "device": torch_device,
-        "timestep": 399,
+        "timestep": OSDFACE_DENOISE_TIMESTEP,
         "get_x0_from_noise": get_x0_from_noise,
     }
 
 
 def _merge_lora_unet(sd_model: str, weights_dir: Path, repo_dir: Path):
+    """Merge the OSDFace LoRA weights into the SD UNet and return the fused model."""
+
     import torch
     from diffusers import UNet2DConditionModel
     from safetensors import safe_open
 
     unet = UNet2DConditionModel.from_pretrained(sd_model, subfolder="unet")
-    lora_rank = 16
-    lora_alpha = 16
-    alpha = float(lora_alpha / lora_rank)
+    alpha = float(LORA_ALPHA / LORA_RANK)
 
     lora_path = str(weights_dir / "pytorch_lora_weights.safetensors")
     state_dict_unet = unet.state_dict()
@@ -156,6 +172,11 @@ def _make_vqvae_args(img_encoder_weight: str):
 
 
 def restore_image(model: dict, image_tensor):
+    """Run one-step OSDFace restoration on a batched [-1, 1] image tensor.
+
+    Returns the restored image in the [0, 1] range.
+    """
+
     import torch
     import torch.nn.functional as Fun
 
@@ -164,10 +185,12 @@ def restore_image(model: dict, image_tensor):
         dtype = model["weight_dtype"]
         lq = image_tensor.to(device, dtype=dtype)
 
-        if lq.shape[2] != 512 or lq.shape[3] != 512:
-            lq = Fun.interpolate(lq, (512, 512), mode="bilinear", align_corners=True)
+        if lq.shape[2] != OSDFACE_INPUT_SIZE or lq.shape[3] != OSDFACE_INPUT_SIZE:
+            lq = Fun.interpolate(
+                lq, (OSDFACE_INPUT_SIZE, OSDFACE_INPUT_SIZE), mode="bilinear", align_corners=True
+            )
 
-        prompt_embeds = model["img_encoder"](lq).reshape(lq.shape[0], 77, -1)
+        prompt_embeds = model["img_encoder"](lq).reshape(lq.shape[0], SD_PROMPT_TOKENS, -1)
         prompt_embeds = model["embedding_change"](prompt_embeds)
 
         lq_latent = (
@@ -194,6 +217,8 @@ def restore_image(model: dict, image_tensor):
 
 
 def load_swinir_model(*, device: str, upscale_factor: int = 2):
+    """Load a SwinIR super-resolution model for optional post-restoration upscaling."""
+
     try:
         from basicsr.archs.swinir_arch import SwinIR
     except ImportError as error:
@@ -219,6 +244,8 @@ def load_swinir_model(*, device: str, upscale_factor: int = 2):
 
 
 def upscale_image(model, image_tensor, *, upscale_factor: int = 2):
+    """Upscale a batched image tensor with SwinIR, padding to a multiple of the factor."""
+
     import torch
     import torch.nn.functional as Fun
 
@@ -264,12 +291,8 @@ def main() -> None:
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for identity_dir in sorted(path for path in source_dir.iterdir() if path.is_dir()):
-        images = sorted(
-            path
-            for path in identity_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
-        )
+    for identity_dir in iter_identity_dirs(source_dir):
+        images = list_identity_images(identity_dir)
         if not images:
             continue
 
