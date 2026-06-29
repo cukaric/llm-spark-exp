@@ -25,6 +25,8 @@ dependencies = [
 
 [project.scripts]
 stock-prices = "llm_spark_exp.stock_prices_cli:app"
+synthetic-faces = "llm_spark_exp.synthetic_faces_cli:app"
+synthetic-perplexity = "llm_spark_exp.synthetic_perplexity_cli:app"
 
 [project.optional-dependencies]
 agents = [
@@ -47,13 +49,28 @@ vlm = [
   "pillow>=11.0.0",
   "timm>=1.0.0",
 ]
+synthetic-faces = [
+  "huggingface-hub>=0.24.6",
+  "fvcore>=0.1.5.post20221221",
+  "imageio>=2.9.0",
+  "lmdb>=1.0.0",
+  "msgpack>=1.0.1",
+  "omegaconf>=2.3.0",
+  "pytorch-msssim>=1.0.0",
+  "safetensors>=0.5.0",
+  "sixdrepnet>=0.1.6",
+  "timm>=0.9.16",
+  "transformers>=4.48.0",
+]
 
 [dependency-groups]
 dev = [
+  "bandit>=1.9.4",
   "hypothesis>=6.148.0",
   "ipykernel>=6.29.5",
   "ipywidgets>=8.1.5",
   "jupyterlab>=4.3.0",
+  "mypy>=2.1.0",
   "nbclient>=0.10.2",
   "nbconvert>=7.16.4",
   "notebook>=7.3.0",
@@ -110,6 +127,32 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "notebooks/**/*.py" = ["E402"]
+# Ported OSDFace LoRA-merge math: keep upstream tensor naming (W_A, delta_W),
+# the F/Fun/TF functional aliases, and the safetensors handle's .keys() call.
+"src/llm_spark_exp/synthetic_faces/restoration/restore_worker.py" = ["N806", "N812", "SIM118"]
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+files = ["src/llm_spark_exp/synthetic_faces"]
+
+[[tool.mypy.overrides]]
+# The torch/diffusers GPU workers run untyped third-party code (no stubs); type
+# checking them is noise until stubs exist, so only the pure modules are checked.
+module = [
+  "llm_spark_exp.synthetic_faces.generation.center_worker",
+  "llm_spark_exp.synthetic_faces.restoration.restore_worker",
+  "llm_spark_exp.synthetic_faces.restoration.flux_refine_worker",
+]
+ignore_errors = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+# Accepted patterns for a local ML pipeline that drives trusted external repos:
+# B101 asserts; B404/B603/B607 subprocess with internally-built argv; B110 the
+# intentional LMDB decode fallback; B614 torch.load of trusted local weights;
+# B615 hf_hub_download without a pinned revision.
+skips = ["B101", "B110", "B404", "B603", "B607", "B614", "B615"]
