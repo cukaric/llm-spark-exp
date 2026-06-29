@@ -65,10 +65,12 @@ synthetic-faces = [
 
 [dependency-groups]
 dev = [
+  "bandit>=1.9.4",
   "hypothesis>=6.148.0",
   "ipykernel>=6.29.5",
   "ipywidgets>=8.1.5",
   "jupyterlab>=4.3.0",
+  "mypy>=2.1.0",
   "nbclient>=0.10.2",
   "nbconvert>=7.16.4",
   "notebook>=7.3.0",
@@ -131,3 +133,26 @@ ignore = [
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+files = ["src/llm_spark_exp/synthetic_faces"]
+
+[[tool.mypy.overrides]]
+# The torch/diffusers GPU workers run untyped third-party code (no stubs); type
+# checking them is noise until stubs exist, so only the pure modules are checked.
+module = [
+  "llm_spark_exp.synthetic_faces.generation.center_worker",
+  "llm_spark_exp.synthetic_faces.restoration.restore_worker",
+  "llm_spark_exp.synthetic_faces.restoration.flux_refine_worker",
+]
+ignore_errors = true
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+# Accepted patterns for a local ML pipeline that drives trusted external repos:
+# B101 asserts; B404/B603/B607 subprocess with internally-built argv; B110 the
+# intentional LMDB decode fallback; B614 torch.load of trusted local weights;
+# B615 hf_hub_download without a pinned revision.
+skips = ["B101", "B110", "B404", "B603", "B607", "B614", "B615"]

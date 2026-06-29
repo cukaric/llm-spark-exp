@@ -163,7 +163,7 @@ def apply_yaw_perspective(
     yaw: float,
     fill: tuple[int, int, int],
 ) -> Image.Image:
-    width, height = image.size
+    width, height = float(image.size[0]), float(image.size[1])
     inset = abs(yaw) * width * 0.16
     vertical_shift = abs(yaw) * height * 0.035
     if yaw > 0:
@@ -224,4 +224,4 @@ def estimate_fill_color(image: Image.Image) -> tuple[int, int, int]:
         axis=0,
     )
     color = np.median(border, axis=0)
-    return tuple(int(channel) for channel in color)
+    return (int(color[0]), int(color[1]), int(color[2]))
