@@ -93,6 +93,10 @@ addopts = [
   "--strict-markers",
 ]
 testpaths = ["tests"]
+markers = [
+  "gpu: integration test needing a CUDA device plus model weights/repos; run with --run-gpu",
+  "slow: slow or resource-heavy test",
+]
 
 [tool.coverage.run]
 branch = true
