@@ -46,6 +46,13 @@ def sample_nearby_vectors(
     epsilons: tuple[float, ...],
     percentages: tuple[float, ...],
 ) -> torch.Tensor:
+    """Sample identity-preserving neighbors by adding scaled Gaussian noise.
+
+    Rows of ``base_vector`` are split across the noise scales (``epsilons``) by
+    the given ``percentages``, perturbed, then renormalized to each row's
+    original norm so identity magnitude is preserved.
+    """
+
     if len(epsilons) != len(percentages):
         raise ValueError("variation sigmas and weights must have the same length.")
     if not np.isclose(sum(percentages), 1.0):
@@ -68,6 +75,8 @@ def sample_nearby_vectors(
 
 
 def parse_float_tuple(value: str, *, name: str) -> tuple[float, ...]:
+    """Parse a comma-separated string into a tuple of positive floats."""
+
     items = tuple(float(part.strip()) for part in value.split(",") if part.strip())
     if not items:
         raise ValueError(f"{name} must contain at least one value.")
@@ -77,6 +86,8 @@ def parse_float_tuple(value: str, *, name: str) -> tuple[float, ...]:
 
 
 def create_fr_model(model_path: Path, *, depth: str = "100") -> torch.nn.Module:
+    """Load an IResNet face-recognition model from the Vec2Face+ checkout."""
+
     from models import iresnet
 
     model = iresnet(depth)
@@ -86,6 +97,8 @@ def create_fr_model(model_path: Path, *, depth: str = "100") -> torch.nn.Module:
 
 
 def save_images(images: np.ndarray, id_nums: torch.Tensor, *, root: Path, name: str) -> None:
+    """Write generated images into per-identity folders with dense numbering."""
+
     save_root = root / name
     previous_id = None
     image_indices: dict[int, int] = {}
@@ -102,6 +115,8 @@ def save_images(images: np.ndarray, id_nums: torch.Tensor, *, root: Path, name: 
 
 
 def main() -> None:
+    """Generate identities from center features and write them under the repo output root."""
+
     args = parse_args()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)

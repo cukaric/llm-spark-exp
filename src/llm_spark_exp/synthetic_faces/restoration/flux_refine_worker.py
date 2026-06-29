@@ -5,8 +5,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from llm_spark_exp.synthetic_faces._common import save_jpeg
-from llm_spark_exp.synthetic_faces.constants import IMAGE_SUFFIXES
+from llm_spark_exp.synthetic_faces._common import (
+    iter_identity_dirs,
+    list_identity_images,
+    save_jpeg,
+)
+
+FLUX_MAX_SEQUENCE_LENGTH = 256  # T5 text-encoder sequence length for FLUX
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,6 +39,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def torch_dtype(name: str):
+    """Map a dtype name to the matching torch dtype."""
+
     import torch
 
     if name == "bfloat16":
@@ -44,18 +51,15 @@ def torch_dtype(name: str):
 
 
 def iter_images(source_dir: Path, *, identity_limit: int | None, max_images: int | None):
+    """Yield (identity_name, image_path) pairs, bounded by identity/image limits."""
+
     yielded = 0
-    identity_dirs = sorted(path for path in source_dir.iterdir() if path.is_dir())
+    identity_dirs = iter_identity_dirs(source_dir)
     if identity_limit is not None:
         identity_dirs = identity_dirs[:identity_limit]
 
     for identity_dir in identity_dirs:
-        images = sorted(
-            path
-            for path in identity_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
-        )
-        for image_path in images:
+        for image_path in list_identity_images(identity_dir):
             if max_images is not None and yielded >= max_images:
                 return
             yielded += 1
@@ -63,6 +67,8 @@ def iter_images(source_dir: Path, *, identity_limit: int | None, max_images: int
 
 
 def main() -> None:
+    """Refine every image under the source tree with FLUX image-to-image."""
+
     args = parse_args()
 
     import torch
@@ -111,7 +117,7 @@ def main() -> None:
             guidance_scale=args.guidance_scale,
             true_cfg_scale=args.true_cfg_scale,
             generator=generator,
-            max_sequence_length=256,
+            max_sequence_length=FLUX_MAX_SEQUENCE_LENGTH,
         ).images[0]
         save_jpeg(refined, output_path, quality=args.jpeg_quality)
 
